@@ -1,0 +1,481 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- === GLOBALS ===
+local GUI_VISIBLE = false
+local MainGui = nil
+local CurrentTab = nil
+local ActiveScripts = {}
+
+-- === DRAG FUNCTION ===
+local function makeDraggable(frame)
+    local dragging, dragInput, dragStart, startPos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then dragging = false end
+            end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X,
+                                        startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+-- === RIGHT CTRL TOGGLE ===
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.RightControl then
+        GUI_VISIBLE = not GUI_VISIBLE
+        if MainGui then
+            MainGui.Enabled = GUI_VISIBLE
+            print(GUI_VISIBLE and "WorkShopExploit OPENED" or "WorkShopExploit CLOSED")
+        end
+    end
+end)
+
+-- === MAIN GUI ===
+MainGui = Instance.new("ScreenGui")
+MainGui.Name = "WorkShopExploit"
+MainGui.ResetOnSpawn = false
+MainGui.Parent = PlayerGui
+MainGui.Enabled = false
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 500, 0, 400)
+MainFrame.Position = UDim2.new(0.5, -250, 0.5, -200)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+MainFrame.BorderSizePixel = 1
+MainFrame.BorderColor3 = Color3.fromRGB(40, 40, 40)
+MainFrame.Parent = MainGui
+makeDraggable(MainFrame)
+
+-- Title
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, 0, 0, 40)
+Title.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+Title.BorderSizePixel = 1
+Title.BorderColor3 = Color3.fromRGB(40, 40, 40)
+Title.Text = "WorkShopExploit"
+Title.TextColor3 = Color3.fromRGB(235, 235, 235)
+Title.Font = Enum.Font.GothamBold
+Title.TextSize = 20
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = MainFrame
+
+local TitlePadding = Instance.new("UIPadding")
+TitlePadding.PaddingLeft = UDim.new(0, 12)
+TitlePadding.PaddingRight = UDim.new(0, 12)
+TitlePadding.Parent = Title
+
+-- === LEFT SIDE PANEL ===
+local SidePanel = Instance.new("Frame")
+SidePanel.Size = UDim2.new(0, 120, 1, -95)
+SidePanel.Position = UDim2.new(0, 10, 0, 45)
+SidePanel.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+SidePanel.BorderSizePixel = 1
+SidePanel.BorderColor3 = Color3.fromRGB(40, 40, 40)
+SidePanel.Parent = MainFrame
+
+local SideLayout = Instance.new("UIListLayout")
+SideLayout.Padding = UDim.new(0, 2)
+SideLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+SideLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+SideLayout.Parent = SidePanel
+
+-- === MAIN CONTENT AREA ===
+local ContentArea = Instance.new("Frame")
+ContentArea.Size = UDim2.new(1, -140, 1, -95)
+ContentArea.Position = UDim2.new(0, 135, 0, 45)
+ContentArea.BackgroundColor3 = Color3.fromRGB(16, 16, 16)
+ContentArea.BorderSizePixel = 1
+ContentArea.BorderColor3 = Color3.fromRGB(35, 35, 35)
+ContentArea.Parent = MainFrame
+
+-- === TAB CONTENT ===
+local function createTabContent()
+    local frame = Instance.new("ScrollingFrame")
+    frame.Size = UDim2.new(1, -12, 1, -12)
+    frame.Position = UDim2.new(0, 6, 0, 6)
+    frame.BackgroundTransparency = 1
+    frame.ScrollBarThickness = 3
+    frame.ScrollBarImageColor3 = Color3.fromRGB(90, 90, 90)
+    frame.Visible = false
+    frame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    frame.Parent = ContentArea
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 4)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = frame
+    
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        frame.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+    end)
+
+    return frame, layout
+end
+
+local Tab1Content, Tab1Layout = createTabContent() -- Arsenal
+local Tab2Content, Tab2Layout = createTabContent() -- Scripts  
+local Tab3Content, Tab3Layout = createTabContent() -- Humanoid
+local Tab5Content, Tab5Layout = createTabContent() -- Patch
+
+-- === MAKE SIDE TAB BUTTONS ===
+local ActiveTabButton = nil
+local function makeTab(name, content)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -12, 0, 28)
+    btn.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(55, 55, 55)
+    btn.Text = name
+    btn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 13
+    btn.AutoButtonColor = false
+    btn.TextWrapped = true
+    btn.Parent = SidePanel
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 4)
+    padding.PaddingRight = UDim.new(0, 4)
+    padding.PaddingTop = UDim.new(0, 2)
+    padding.PaddingBottom = UDim.new(0, 2)
+    padding.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        for _, t in pairs({Tab1Content, Tab2Content, Tab3Content, Tab5Content}) do
+            t.Visible = false
+        end
+        content.Visible = true
+        CurrentTab = content
+
+        if ActiveTabButton then
+            ActiveTabButton.BackgroundColor3 = Color3.fromRGB(32, 32, 32)
+            ActiveTabButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+        end
+        ActiveTabButton = btn
+        btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    end)
+    return btn
+end
+
+makeTab("Arsenal", Tab1Content)
+makeTab("Scripts", Tab2Content)
+makeTab("Humanoid", Tab3Content)
+makeTab("Patch", Tab5Content)
+
+-- === SEARCH BAR ===
+local SearchBox = Instance.new("TextBox")
+SearchBox.Size = UDim2.new(1, -20, 0, 28)
+SearchBox.Position = UDim2.new(0, 10, 1, -45)
+SearchBox.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+SearchBox.BorderSizePixel = 1
+SearchBox.BorderColor3 = Color3.fromRGB(40, 40, 40)
+SearchBox.PlaceholderText = "Search scripts..."
+SearchBox.PlaceholderColor3 = Color3.fromRGB(140, 140, 140)
+SearchBox.Text = ""
+SearchBox.TextColor3 = Color3.fromRGB(235, 235, 235)
+SearchBox.Font = Enum.Font.Gotham
+SearchBox.TextSize = 14
+SearchBox.Parent = MainFrame
+
+local SearchPadding = Instance.new("UIPadding")
+SearchPadding.PaddingLeft = UDim.new(0, 8)
+SearchPadding.Parent = SearchBox
+
+-- === TOGGLE SCRIPT FUNCTION ===
+local function toggleScript(data, btn)
+    local key = data.Name
+    if ActiveScripts[key] then
+        if ActiveScripts[key].Stop then ActiveScripts[key].Stop() end
+        ActiveScripts[key] = nil
+        btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        btn.TextColor3 = Color3.fromRGB(230, 230, 230)
+    else
+        pcall(function()
+            local stop = data.Run()
+            ActiveScripts[key] = { Stop = stop or function() end }
+            btn.BackgroundColor3 = Color3.fromRGB(70, 110, 160)
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end)
+    end
+end
+
+-- === SIMPLE WORKING SLIDERS ===
+local function createSlider(parent, name, min, max, default)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(1, -12, 0, 50)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    sliderFrame.BorderSizePixel = 1
+    sliderFrame.BorderColor3 = Color3.fromRGB(50, 50, 50)
+    sliderFrame.Parent = parent
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 20)
+    title.BackgroundTransparency = 1
+    title.Text = name
+    title.TextColor3 = Color3.fromRGB(220, 220, 220)
+    title.Font = Enum.Font.Gotham
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = sliderFrame
+
+    local valueLabel = Instance.new("TextLabel")
+    valueLabel.Size = UDim2.new(0, 60, 0, 20)
+    valueLabel.Position = UDim2.new(1, -65, 0.5, -10)
+    valueLabel.BackgroundTransparency = 1
+    valueLabel.Text = tostring(default)
+    valueLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    valueLabel.Font = Enum.Font.GothamBold
+    valueLabel.TextSize = 14
+    valueLabel.Parent = sliderFrame
+
+    local sliderBar = Instance.new("Frame")
+    sliderBar.Size = UDim2.new(1, -20, 0, 8)
+    sliderBar.Position = UDim2.new(0, 10, 1, -18)
+    sliderBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    sliderBar.BorderSizePixel = 0
+    sliderBar.Parent = sliderFrame
+
+    local sliderFill = Instance.new("Frame")
+    sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
+    sliderFill.BackgroundColor3 = Color3.fromRGB(70, 110, 160)
+    sliderFill.BorderSizePixel = 0
+    sliderFill.Parent = sliderBar
+
+    local currentValue = default
+    local dragging = false
+
+    spawn(function()
+        while sliderFrame.Parent do
+            wait(0.1)
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChild("Humanoid") then
+                if name == "WalkSpeed" then
+                    char.Humanoid.WalkSpeed = currentValue
+                elseif name == "JumpPower" then
+                    char.Humanoid.JumpPower = currentValue
+                end
+            end
+        end
+    end)
+
+    sliderBar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+        end
+    end)
+
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = false
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+            local mouseX = input.Position.X
+            local barPos = sliderBar.AbsolutePosition.X
+            local barSize = sliderBar.AbsoluteSize.X
+            local percent = math.clamp((mouseX - barPos) / barSize, 0, 1)
+            currentValue = math.floor(min + (max - min) * percent)
+            
+            sliderFill.Size = UDim2.new(percent, 0, 1, 0)
+            valueLabel.Text = tostring(currentValue)
+        end
+    end)
+
+    return sliderFrame
+end
+
+-- === ARSENAL FUNCTIONS ===
+local function getArsenalRemote()
+    local RS = game:GetService("ReplicatedStorage")
+    return RS:WaitForChild("REMOTES"):WaitForChild("REMOTE_ARSENAL")
+end
+
+local function giveWeapon(weaponName)
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        local args = {{
+            TYPE = RS:WaitForChild("MODULES"):WaitForChild("MODULE_SHOP"):WaitForChild("ITEM_TYPES"):WaitForChild("FRAME_WEAPON_ITEM"),
+            AMMO = 4, COST = 9e-10,
+            AMMO_TYPE = {
+                TYPE = RS:WaitForChild("MODULES"):WaitForChild("MODULE_SHOP"):WaitForChild("ITEM_TYPES"):WaitForChild("FRAME_WEAPON_ITEM"),
+                AMMO = "Nails", COST = 2, WORTH = false, IMAGE_ID = "rbxassetid://14793880027",
+                FORCE_PURCHASE = true, IMAGE_COLOR = Color3.new(1,1,1), ORDER = 10, WORTH_COST = 15, AMOUNT = 1
+            },
+            WORTH = true, IMAGE_ID = "rbxassetid://14673183012", FORCE_PURCHASE = true,
+            IMAGE_COLOR = Color3.new(1,1,1), ORDER = 2, WORTH_COST = 35,
+            TOOL = RS:WaitForChild("Weapons"):WaitForChild(weaponName), STAT = {}
+        }}
+        getArsenalRemote():FireServer(unpack(args))
+        print(weaponName .. " activated")
+    end)
+end
+
+-- === ALL SCRIPTS ===
+local Scripts = {
+    -- ARSENAL (34 оружия)
+    { Tab = Tab1Content, Name = "Golden Hammer", Run = function() giveWeapon("Golden Hammer") end },
+    { Tab = Tab1Content, Name = "Boom Stick", Run = function() giveWeapon("Boom Stick") end },
+    { Tab = Tab1Content, Name = "Minigun", Run = function() giveWeapon("Minigun") end },
+    { Tab = Tab1Content, Name = "M249", Run = function() giveWeapon("M249") end },
+    { Tab = Tab1Content, Name = "USP", Run = function() giveWeapon("USP") end },
+    { Tab = Tab1Content, Name = "Pistol 9mm", Run = function() giveWeapon("Pistol 9mm") end },
+    { Tab = Tab1Content, Name = "MP7 SMG", Run = function() giveWeapon("MP7 SMG") end },
+    { Tab = Tab1Content, Name = "SSG", Run = function() giveWeapon("SSG") end },
+    { Tab = Tab1Content, Name = "FAMAS", Run = function() giveWeapon("FAMAS") end },
+    { Tab = Tab1Content, Name = "Uzi", Run = function() giveWeapon("Uzi") end },
+    { Tab = Tab1Content, Name = "SG 553", Run = function() giveWeapon("SG 553") end },
+    { Tab = Tab1Content, Name = "Glock 18", Run = function() giveWeapon("Glock 18") end },
+    { Tab = Tab1Content, Name = "Desert Eagle", Run = function() giveWeapon("Desert Eagle") end },
+    { Tab = Tab1Content, Name = "Galil", Run = function() giveWeapon("Galil") end },
+    { Tab = Tab1Content, Name = "MP5 SMG", Run = function() giveWeapon("MP5 SMG") end },
+    { Tab = Tab1Content, Name = "AWP", Run = function() giveWeapon("AWP") end },
+    { Tab = Tab1Content, Name = "AK-47", Run = function() giveWeapon("AK-47") end },
+    { Tab = Tab1Content, Name = "M4A1", Run = function() giveWeapon("M4A1") end },
+    { Tab = Tab1Content, Name = "AUG", Run = function() giveWeapon("AUG") end },
+    { Tab = Tab1Content, Name = "Benelli M3", Run = function() giveWeapon("Benelli M3") end },
+    { Tab = Tab1Content, Name = "Admin Gun", Run = function() giveWeapon("Admin Gun") end },
+    { Tab = Tab1Content, Name = "Medical Kit", Run = function() giveWeapon("Medical Kit") end },
+    { Tab = Tab1Content, Name = "HealRay", Run = function() giveWeapon("HealRay") end },
+    { Tab = Tab1Content, Name = "Carpenter's Hummer", Run = function() giveWeapon("Carpenter's Hummer") end },
+    { Tab = Tab1Content, Name = "Turret", Run = function() giveWeapon("Turret") end },
+    { Tab = Tab1Content, Name = "Grenade", Run = function() giveWeapon("Grenade") end },
+    { Tab = Tab1Content, Name = "Crowbar", Run = function() giveWeapon("Crowbar") end },
+    { Tab = Tab1Content, Name = "Plank", Run = function() giveWeapon("Plank") end },
+    { Tab = Tab1Content, Name = "Butcher Knife", Run = function() giveWeapon("Butcher Knife") end },
+    { Tab = Tab1Content, Name = "Sledgehammer", Run = function() giveWeapon("Sledgehammer") end },
+    { Tab = Tab1Content, Name = "Rebar", Run = function() giveWeapon("Rebar") end },
+    { Tab = Tab1Content, Name = "Katana", Run = function() giveWeapon("Katana") end },
+    { Tab = Tab1Content, Name = "Chaisaw", Run = function() giveWeapon("Chaisaw") end },
+    { Tab = Tab1Content, Name = "RPG", Run = function() giveWeapon("RPG") end },
+
+    -- Scripts
+    { Tab = Tab2Content, Name = "Arsenal Server Browser", Run = function() 
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/rndmq/Serverlist/refs/heads/main/Server87"))()
+        end)
+    end },
+    
+    { Tab = Tab2Content, Name = "Exploit Menu", Run = function() 
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/elernete10075/GarrysModSurw/refs/heads/main/ExploitMenu"))()
+        end)
+    end },
+
+    -- Patch
+    { Tab = Tab5Content, Name = "Patch Notes", Run = function() 
+        local existingNote = Tab5Content:FindFirstChild("PatchNote")
+        if existingNote then
+            existingNote:Destroy()
+        else
+            local note = Instance.new("TextLabel")
+            note.Name = "PatchNote"
+            note.Size = UDim2.new(1, -12, 0, 200)
+            note.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            note.BorderSizePixel = 1
+            note.BorderColor3 = Color3.fromRGB(55, 55, 55)
+            note.Text = "-Arsenal: 34 weapons (Grenade fixed)\n-Ammo section removed\n-Scripts: Exploit Menu added\n-Humanoid sliders"
+            note.TextColor3 = Color3.fromRGB(220, 220, 220)
+            note.Font = Enum.Font.Gotham
+            note.TextSize = 15
+            note.TextWrapped = true
+            note.TextXAlignment = Enum.TextXAlignment.Left
+            note.Parent = Tab5Content
+            
+            local padding = Instance.new("UIPadding")
+            padding.PaddingLeft = UDim.new(0, 8)
+            padding.PaddingTop = UDim.new(0, 8)
+            padding.Parent = note
+        end
+    end }
+}
+
+-- === CREATE BUTTONS ===
+local ButtonLists = { Tab1 = {}, Tab2 = {}, Tab3 = {}, Tab5 = {} }
+
+local function createButton(scriptData)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -12, 0, 38)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.BorderSizePixel = 1
+    btn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+    btn.Text = scriptData.Name
+    btn.TextColor3 = Color3.fromRGB(230, 230, 230)
+    btn.Font = Enum.Font.Gotham
+    btn.TextSize = 14
+    btn.AutoButtonColor = false
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.Parent = scriptData.Tab
+
+    local padding = Instance.new("UIPadding")
+    padding.PaddingLeft = UDim.new(0, 10)
+    padding.PaddingTop = UDim.new(0, 4)
+    padding.PaddingBottom = UDim.new(0, 4)
+    padding.Parent = btn
+
+    btn.MouseButton1Click:Connect(function()
+        toggleScript(scriptData, btn)
+    end)
+
+    return btn
+end
+
+-- Создаем слайдеры
+createSlider(Tab3Content, "WalkSpeed", 16, 200, 16)
+createSlider(Tab3Content, "JumpPower", 50, 200, 50)
+
+-- Создаем все кнопки
+for _, s in ipairs(Scripts) do
+    local btn = createButton(s)
+    table.insert(
+        s.Tab == Tab1Content and ButtonLists.Tab1 or
+        s.Tab == Tab2Content and ButtonLists.Tab2 or
+        s.Tab == Tab3Content and ButtonLists.Tab3 or
+        ButtonLists.Tab5, btn
+    )
+end
+
+-- === SEARCH FUNCTION ===
+local function updateSearch()
+    local query = SearchBox.Text:lower()
+    local list = CurrentTab == Tab1Content and ButtonLists.Tab1 or
+                 CurrentTab == Tab2Content and ButtonLists.Tab2 or
+                 CurrentTab == Tab3Content and ButtonLists.Tab3 or
+                 ButtonLists.Tab5
+    for _, btn in ipairs(list or {}) do
+        btn.Visible = query == "" or btn.Text:lower():find(query) ~= nil
+    end
+end
+SearchBox:GetPropertyChangedSignal("Text"):Connect(updateSearch)
+
+-- === STARTUP ===
+Tab1Content.Visible = true
+CurrentTab = Tab1Content
+
+task.wait(0.5)
+if Tab1Content.UIListLayout then
+    Tab1Content.CanvasSize = UDim2.new(0, 0, 0, Tab1Content.UIListLayout.AbsoluteContentSize.Y + 20)
+end
+
+print("WorkShopExploit v1.52 LOADED | Press Right Ctrl to OPEN | Arsenal: 34 weapons + Exploit Menu!")
